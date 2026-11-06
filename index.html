@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#03080b">
+<meta name="description" content="ORBITAL: Kessler Protocol — a 3D satellite warfare hacking game. Hook enemy satellites, breach their command links, and blind the constellation.">
+<title>ORBITAL // KESSLER PROTOCOL</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23020608'/%3E%3Cpath d='M16 4l12 12-12 12L4 16z' fill='none' stroke='%235ff5e0' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%235ff5e0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="scene" aria-label="3D orbital tactical view"></canvas>
+
+  <!-- ==================== HUD ==================== -->
+  <div id="hud" class="hud" aria-hidden="true">
+    <div id="scan" class="scan"></div>
+    <div class="hud-corner tl"></div>
+    <div class="hud-corner tr"></div>
+    <div class="hud-corner bl"></div>
+    <div class="hud-corner br"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="brand-text">
+          <strong>ORBITAL</strong>
+          <span>KESSLER PROTOCOL</span>
+        </div>
+      </div>
+
+      <div class="op-block">
+        <span class="live-dot"></span>
+        <span class="op-name">OP NIGHTGLASS</span>
+        <span class="op-sub">SITE RAVEN // 38.9°N 77.0°W</span>
+      </div>
+
+      <div class="trace-cluster">
+        <div class="trace-top">
+          <span class="micro">ENEMY TRACE</span>
+          <b id="tracePct">0%</b>
+        </div>
+        <div class="trace-track" id="traceTrack">
+          <div class="trace-fill" id="traceFill"></div>
+          <div class="trace-ticks" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        </div>
+        <button id="spoofBtn" class="spoof" aria-label="Spoof trace">
+          <span class="spoof-glyph" aria-hidden="true">◈</span>
+          <span class="spoof-text"><b>SPOOF</b><small id="spoofCd">READY</small></span>
+        </button>
+      </div>
+
+      <div class="top-actions">
+        <button id="audioBtn" class="icon-btn" aria-label="Toggle audio" title="Audio">
+          <span class="audio-on" aria-hidden="true">♪</span>
+        </button>
+        <button id="fsBtn" class="icon-btn" aria-label="Fullscreen" title="Fullscreen">
+          <span aria-hidden="true">⛶</span>
+        </button>
+        <button id="pauseBtn" class="icon-btn pause-btn" aria-label="Pause" title="Pause">
+          <span aria-hidden="true">Ⅱ</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="intel-cluster">
+      <span class="micro">ASSETS SEIZED</span>
+      <div class="intel-pips" id="intelPips">
+        <i></i><i></i><i></i><i></i>
+      </div>
+      <span class="intel-count"><b id="intelCount">0</b>/4</span>
+    </div>
+    <div id="targetRail" class="target-rail" aria-label="Hostile asset list"></div>
+
+    <div id="markers" class="markers"></div>
+    <div id="log" class="log"></div>
+
+    <div id="coach" class="coach">
+      <span class="coach-bracket" aria-hidden="true"></span>
+      <span id="coachText">TAP A HOSTILE SATELLITE TO DESIGNATE</span>
+    </div>
+
+    <div id="counterAlert" class="counter-alert" hidden>
+      <div class="counter-siren" aria-hidden="true">!</div>
+      <div class="counter-copy">
+        <b>COUNTER-INTRUSION SWEEP</b>
+        <span>Enemy DF is triangulating Site Raven</span>
+      </div>
+      <button id="purgeBtn" class="purge-btn" aria-label="Purge counter intrusion">
+        PURGE
+        <span id="purgeTimer">5.0</span>
+      </button>
+      <div class="counter-progress"><i id="counterFill"></i></div>
+    </div>
+
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+
+    <!-- ==================== TARGET PANEL ==================== -->
+    <aside id="panel" class="panel" aria-hidden="true">
+      <div class="panel-glow"></div>
+      <div class="panel-head">
+        <div class="panel-titles">
+          <span class="micro" id="panelKicker">HOSTILE ASSET // DESIGNATED</span>
+          <h2 id="panelName">ARGUS-7</h2>
+          <div class="panel-tags">
+            <span id="panelClass">RECON</span>
+            <span id="panelOrbit">LEO</span>
+            <span id="panelBand">X-BAND</span>
+            <span id="panelSec" class="sec">SEC 1</span>
+          </div>
+        </div>
+        <button id="closePanel" class="close-btn" aria-label="Close target panel">✕</button>
+      </div>
+
+      <div class="panel-meta">
+        <div><label>ELEVATION</label><b id="panelElev">32°</b></div>
+        <div><label>PASS</label><b id="panelPass">AOS 00:24</b></div>
+        <div><label>SECURITY</label><b id="panelSecNum">LOW</b></div>
+      </div>
+
+      <p class="dossier" id="panelDossier">Battlefield reconnaissance platform. Electro-optical downlink carries live targeting imagery.</p>
+      <div class="dossier-rule"></div>
+
+      <!-- HOOK -->
+      <div id="hookView" class="phase-view">
+        <div class="phase-head">
+          <span class="micro">PHASE 01 // SIGNAL ACQUISITION</span>
+          <span class="phase-state" id="hookState">STANDBY</span>
+        </div>
+        <div class="freq" id="freqBar">
+          <div class="freq-grid" aria-hidden="true"></div>
+          <div class="freq-zone" id="freqZone"></div>
+          <div class="freq-needle" id="freqNeedle"></div>
+          <div class="freq-scan" aria-hidden="true"></div>
+          <span class="freq-label left">0.0</span>
+          <span class="freq-label right">18.0 GHz</span>
+        </div>
+        <div class="lock-row">
+          <div class="lock-pips" id="lockPips"><i></i><i></i><i></i></div>
+          <span id="lockLabel">CARRIER LOCKS 0/3</span>
+        </div>
+        <button id="lockBtn" class="primary-btn">LOCK SIGNAL <span class="key-hint">SPACE</span></button>
+        <div class="phase-foot">
+          <span id="hookHint">Tap when the needle enters the acquisition window.</span>
+          <button id="abortHook" class="text-btn">ABORT</button>
+        </div>
+      </div>
+
+      <!-- BREACH -->
+      <div id="breachView" class="phase-view" hidden>
+        <div class="phase-head">
+          <span class="micro">PHASE 02 // COMMAND LINK BREACH</span>
+          <span class="phase-state" id="breachState">LAYER 1/3</span>
+        </div>
+        <div class="layer-strip" id="layerStrip"><i></i><i></i><i></i></div>
+        <div class="proto-wrap">
+          <span class="micro proto-label">REPEAT PROTOCOL</span>
+          <div class="proto-row" id="protoRow"></div>
+        </div>
+        <div class="breach-grid" id="breachGrid"></div>
+        <div class="breach-timer">
+          <div class="breach-timer-top"><span>COUNTERMEASURE CYCLE</span><b id="layerTime">14.0s</b></div>
+          <div class="breach-timer-track"><i id="layerTimerFill"></i></div>
+        </div>
+        <div class="phase-foot">
+          <span>Tap the protocol glyphs in order. Wrong input raises trace.</span>
+          <button id="abortBreach" class="text-btn">ABORT</button>
+        </div>
+      </div>
+
+      <!-- SECURED -->
+      <div id="securedView" class="phase-view" hidden>
+        <div class="secured-badge"><span aria-hidden="true">✓</span> LINK SECURED</div>
+        <p class="secured-copy" id="securedCopy">ARGUS-7 is under friendly control. Telemetry is being stripped from its downlink.</p>
+        <div class="secured-bonus" id="securedBonus">EW COVER // TRACE GROWTH REDUCED</div>
+        <button id="securedClose" class="primary-btn">RETURN TO ORBIT</button>
+      </div>
+    </aside>
+
+    <button id="hudHelp" class="hud-help" aria-label="Mission help">?</button>
+  </div>
+
+  <!-- ==================== TITLE ==================== -->
+  <section id="titleScreen" class="screen title-screen">
+    <div class="title-shade"></div>
+    <div class="title-topline">
+      <span>ORBITAL WARFARE SIMULATION</span>
+      <span class="title-clock" id="titleClock">T+00:00:00</span>
+      <span>SIGINT // CLASSIFIED</span>
+    </div>
+    <div class="title-grid">
+      <div class="title-main">
+        <div class="kicker"><span class="live-dot"></span> OPERATION NIGHTGLASS <span class="kicker-sep">/</span> PHONE + TABLET READY</div>
+        <h1>ORBITAL<span class="title-sub">KESSLER <em>PROTOCOL</em></span></h1>
+        <p class="tagline">Hook their birds. Breach their command links.<br><b>Blind the constellation.</b></p>
+        <div class="start-row">
+          <button id="startBtn" class="start-btn" aria-label="Start">
+            <span class="start-ico" aria-hidden="true">▶</span>
+            <span>START</span>
+            <span class="start-bar" aria-hidden="true"></span>
+          </button>
+          <div class="start-note">
+            <span>TOUCH + MOUSE</span>
+            <span>DRAG TO ORBIT THE GLOBE</span>
+          </div>
+        </div>
+        <div class="title-foot">
+          <span class="blink">●</span> SITE RAVEN UPLINK NOMINAL
+          <span class="sep">/</span> CONSTELLATION: KESTREL NET
+          <span class="sep">/</span> 6 HOSTILE ASSETS
+        </div>
+      </div>
+
+      <aside class="brief-card">
+        <div class="brief-head">
+          <span>MISSION BRIEF</span>
+          <span class="brief-code">OP NIGHTGLASS</span>
+        </div>
+        <p class="brief-lede">
+          A hostile constellation is feeding targeting data to enemy long-range fires.
+          Site Raven is the only uplink in range.
+        </p>
+        <ol class="brief-steps">
+          <li><b>01</b> Designate a hostile satellite above your horizon.</li>
+          <li><b>02</b> Hook its downlink: lock the carrier three times.</li>
+          <li><b>03</b> Breach 3 security layers by repeating the protocol.</li>
+          <li><b>04</b> Seize 4 of 6 assets before trace reaches 100%.</li>
+        </ol>
+        <div class="brief-doctrine">
+          <span class="micro">FIELD DOCTRINE</span>
+          <p>High elevation widens the acquisition window. Captured birds provide EW cover. Purge counter-intrusion sweeps or the site is lost.</p>
+        </div>
+        <div class="brief-threat">
+          <span class="threat-dot"></span> THREAT LEVEL: SEVERE
+          <span class="brief-net">KESTREL NET // ACTIVE</span>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ==================== PAUSE ==================== -->
+  <section id="pauseScreen" class="screen modal-screen" hidden>
+    <div class="modal-card pause-card">
+      <span class="micro">UPLINK HELD</span>
+      <h2>PAUSED</h2>
+      <p>Trace accumulation and enemy sweeps are suspended.</p>
+      <div class="modal-actions">
+        <button id="resumeBtn" class="primary-btn">RESUME UPLINK</button>
+        <button id="pauseRestart" class="ghost-btn">RESTART</button>
+      </div>
+      <p class="modal-note">DRAG THE GLOBE TO CHANGE VIEW · PINCH / SCROLL TO ZOOM</p>
+    </div>
+  </section>
+
+  <!-- ==================== HELP ==================== -->
+  <section id="helpScreen" class="screen modal-screen" hidden>
+    <div class="modal-card help-card">
+      <span class="micro">TACTICAL REFERENCE</span>
+      <h2>FIELD MANUAL</h2>
+      <div class="help-grid">
+        <div><b>01 / DESIGNATE</b><p>Tap a hostile satellite marker or the 3D craft itself. Assets below your local horizon cannot be hooked until AOS.</p></div>
+        <div><b>02 / HOOK</b><p>Press LOCK when the sweeping carrier needle crosses the highlighted window. Three locks open the command link.</p></div>
+        <div><b>03 / BREACH</b><p>Tap the shown protocol glyphs in order. The board reshuffles after every correct input. Wrong taps add trace.</p></div>
+        <div><b>04 / SURVIVE</b><p>Trace climbs while linked. SPOOF lowers it on cooldown. Purge counter-intrusion sweeps before the timer expires.</p></div>
+      </div>
+      <button id="helpClose" class="primary-btn">RETURN TO CONSOLE</button>
+    </div>
+  </section>
+
+  <!-- ==================== END ==================== -->
+  <section id="endScreen" class="screen modal-screen end-screen" hidden>
+    <div class="end-inner">
+      <span class="end-kicker" id="endKicker">OPERATION COMPLETE</span>
+      <h2 id="endTitle">CONSTELLATION BLINDED</h2>
+      <p id="endCopy">Four hostile satellites are under friendly control. Kestrel Net has gone dark.</p>
+      <div class="end-stats">
+        <div><label>ASSETS SEIZED</label><b id="statIntel">4/6</b></div>
+        <div><label>TIME ON STATION</label><b id="statTime">03:12</b></div>
+        <div><label>FINAL TRACE</label><b id="statTrace">61%</b></div>
+        <div><label>SCORE</label><b id="statScore">8410</b></div>
+      </div>
+      <div class="end-sats" id="endSats"></div>
+      <div class="modal-actions">
+        <button id="redeployBtn" class="start-btn small" aria-label="Redeploy"><span class="start-ico" aria-hidden="true">↻</span><span>REDEPLOY</span></button>
+        <span class="end-note">SITE RAVEN REMAINS OPERATIONAL</span>
+      </div>
+    </div>
+  </section>
+
+  <div id="flash" class="flash" aria-hidden="true"></div>
+  <div id="rotateHint" class="rotate-hint" hidden>DRAG TO ORBIT THE GLOBE</div>
+</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
